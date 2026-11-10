@@ -83,8 +83,19 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
   onReorderObjects,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const markdownTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const lastSelectionRef = useRef<{ start: number; end: number } | null>(null);
 
   const objects = currentCanvas?.objects || [];
+
+  const updateTextareaSelection = () => {
+    if (markdownTextareaRef.current) {
+      lastSelectionRef.current = {
+        start: markdownTextareaRef.current.selectionStart,
+        end: markdownTextareaRef.current.selectionEnd,
+      };
+    }
+  };
 
   // Reorder objects within page (Section 9.1)
   const moveObject = (fromIndex: number, toIndex: number) => {
@@ -450,12 +461,64 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
 
   const currentIndex = objects.findIndex((o) => o.id === selectedObject.id);
 
-  // Insert markdown tag into text object (excluding code blocks/inline code as per Section 4.2)
+  // Insert markdown tag into text object with caret awareness:
+  // - If caret is on an empty line: insert snippet directly into the caret position on that empty line.
+  // - If caret is on a non-empty line: insert snippet under that line, shifting all subsequent lines down by 1.
   const insertMarkdownTag = (snippet: string) => {
     if (!textObj) return;
+
+    const textarea = markdownTextareaRef.current;
+    const content = textObj.markdown;
+
+    // Determine caret position
+    let cursorPos = content.length;
+    if (textarea && typeof textarea.selectionStart === 'number') {
+      cursorPos = textarea.selectionStart;
+    } else if (lastSelectionRef.current) {
+      cursorPos = lastSelectionRef.current.start;
+    }
+
+    cursorPos = Math.max(0, Math.min(cursorPos, content.length));
+
+    // Find current line bounds around the caret
+    const lineStart = cursorPos > 0 ? content.lastIndexOf('\n', cursorPos - 1) + 1 : 0;
+    const nextNewline = content.indexOf('\n', cursorPos);
+    const lineEnd = nextNewline !== -1 ? nextNewline : content.length;
+
+    const currentLine = content.slice(lineStart, lineEnd);
+    const isEmptyLine = currentLine.trim().length === 0;
+
+    let newContent: string;
+    let newCursorPos: number;
+
+    if (isEmptyLine) {
+      // Empty line: insert into the caret position, replacing the whitespace of this line
+      newContent = content.slice(0, lineStart) + snippet + content.slice(lineEnd);
+      newCursorPos = lineStart + snippet.length;
+    } else {
+      // Non-empty line: insert snippet directly below the current line, shifting all subsequent lines down by 1
+      const before = content.slice(0, lineEnd);
+      const after = content.slice(lineEnd);
+      newContent = `${before}\n${snippet}${after}`;
+      newCursorPos = lineEnd + 1 + snippet.length;
+    }
+
     onChange({
       ...textObj,
-      markdown: `${textObj.markdown}\n${snippet}`,
+      markdown: newContent,
+    });
+
+    lastSelectionRef.current = {
+      start: newCursorPos,
+      end: newCursorPos,
+    };
+
+    // Restore focus and cursor position in the textarea
+    requestAnimationFrame(() => {
+      if (markdownTextareaRef.current) {
+        markdownTextareaRef.current.focus();
+        markdownTextareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+      }
     });
   };
 
@@ -932,6 +995,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
               <div className="flex flex-wrap items-center gap-1 mb-2 p-1 bg-neutral-50 rounded-lg border border-neutral-200">
                 <button
                   type="button"
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() => insertMarkdownTag('# ')}
                   className="p-1 hover:bg-neutral-200 rounded text-neutral-700 cursor-pointer"
                   title="Заголовок H1"
@@ -940,6 +1004,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
                 </button>
                 <button
                   type="button"
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() => insertMarkdownTag('## ')}
                   className="p-1 hover:bg-neutral-200 rounded text-neutral-700 cursor-pointer"
                   title="Заголовок H2"
@@ -948,6 +1013,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
                 </button>
                 <button
                   type="button"
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() => insertMarkdownTag('**важный текст**')}
                   className="p-1 hover:bg-neutral-200 rounded text-neutral-700 cursor-pointer"
                   title="Жирный"
@@ -956,6 +1022,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
                 </button>
                 <button
                   type="button"
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() => insertMarkdownTag('*курсив*')}
                   className="p-1 hover:bg-neutral-200 rounded text-neutral-700 cursor-pointer"
                   title="Курсив"
@@ -964,6 +1031,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
                 </button>
                 <button
                   type="button"
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() => insertMarkdownTag('- [ ] Новая задача')}
                   className="p-1 hover:bg-neutral-200 rounded text-neutral-700 cursor-pointer"
                   title="Вставить задачу (Task List Checkbox)"
@@ -972,6 +1040,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
                 </button>
                 <button
                   type="button"
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() => insertMarkdownTag('- ')}
                   className="p-1 hover:bg-neutral-200 rounded text-neutral-700 cursor-pointer"
                   title="Маркированный список"
@@ -980,6 +1049,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
                 </button>
                 <button
                   type="button"
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() => insertMarkdownTag('1. ')}
                   className="p-1 hover:bg-neutral-200 rounded text-neutral-700 cursor-pointer"
                   title="Нумерованный список"
@@ -988,6 +1058,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
                 </button>
                 <button
                   type="button"
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() =>
                     insertMarkdownTag(
                       '| Колонка 1 | Колонка 2 |\n| :--- | :--- |\n| Текст | Значение |'
@@ -1000,6 +1071,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
                 </button>
                 <button
                   type="button"
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() => insertMarkdownTag('> Важная цитата')}
                   className="p-1 hover:bg-neutral-200 rounded text-neutral-700 cursor-pointer"
                   title="Цитата"
@@ -1009,10 +1081,17 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
               </div>
 
               <textarea
+                ref={markdownTextareaRef}
                 value={textObj.markdown}
-                onChange={(e) =>
-                  onChange({ ...textObj, markdown: e.target.value })
-                }
+                onChange={(e) => {
+                  onChange({ ...textObj, markdown: e.target.value });
+                  updateTextareaSelection();
+                }}
+                onSelect={updateTextareaSelection}
+                onKeyUp={updateTextareaSelection}
+                onClick={updateTextareaSelection}
+                onFocus={updateTextareaSelection}
+                onBlur={updateTextareaSelection}
                 rows={6}
                 className="w-full bg-neutral-50 border border-neutral-200 rounded-lg p-2.5 font-mono text-xs text-neutral-900 leading-relaxed focus:bg-white focus:border-blue-500 focus:outline-hidden"
                 placeholder="Введите текст в формате Markdown..."
