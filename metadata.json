@@ -1,0 +1,8 @@
+{
+  "name": "Remix Markdown Canvas",
+  "description": "Интерактивный редактор документов на свободном холсте с независимыми Markdown-блоками и точной типографикой.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
